@@ -29,4 +29,70 @@ class AzureADManagement {
         }
     }
 
+     # Method to add a user to a group in Azure AD
+     [void] AddUserToGroup() {
+        $userUPN = Read-Host "Enter the User Principal Name (UPN) of the user"
+        $groupName = Read-Host "Enter the name of the group"
+
+        # Check if the user exists
+        try {
+            $user = Get-AzureADUser -ObjectId $userUPN
+        } catch {
+            if ($_.Exception.Message -like "*Request_ResourceNotFound*") {
+                Write-Host "User $userUPN does not exist in Azure AD." -ForegroundColor Red
+                return
+            } else {
+                Write-Host "An error occurred while retrieving the user: $($_.Exception.Message)" -ForegroundColor Red
+                return
+            }
+        }
+
+        # Check if the group exists
+        $groups = @()
+        try {
+            $groups = Get-AzureADGroup -SearchString $groupName
+        } catch {
+            if ($_.Exception.Message -like "*Request_ResourceNotFound*") {
+                Write-Host "Group $groupName does not exist in Azure AD." -ForegroundColor Red
+                return
+            } else {
+                Write-Host "An error occurred while searching for the group: $($_.Exception.Message)" -ForegroundColor Red
+                return
+            }
+        }
+
+        if ($groups.Count -eq 0) {
+            Write-Host "Group $groupName does not exist in Azure AD." -ForegroundColor Red
+            return
+        } elseif ($groups.Count -gt 1) {
+            Write-Host "Multiple groups found matching the name $groupName." -ForegroundColor Yellow
+            foreach ($grp in $groups) {
+                Write-Host "Group Name: $($grp.DisplayName), Object ID: $($grp.ObjectId)"
+            }
+            $groupObjectId = Read-Host "Please enter the Object ID of the desired group"
+            $group = $groups | Where-Object { $_.ObjectId -eq $groupObjectId }
+            if (-not $group) {
+                Write-Host "Invalid Object ID provided. Exiting..." -ForegroundColor Red
+                return
+            }
+        } else {
+            $group = $groups[0]
+        }
+
+        # Check if the user is already a member of the group
+        $groupMembers = Get-AzureADGroupMember -ObjectId $group.ObjectId
+        if ($groupMembers.ObjectId -contains $user.ObjectId) {
+            Write-Host "User $userUPN is already a member of the group $groupName." -ForegroundColor Yellow
+            return
+        }
+
+        # Add user to the group
+        try {
+            Add-AzureADGroupMember -ObjectId $group.ObjectId -RefObjectId $user.ObjectId
+            Write-Host "User $userUPN added to group $groupName successfully." -ForegroundColor Green
+        } catch {
+            Write-Host "An error occurred while adding the user to the group: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+
 }
